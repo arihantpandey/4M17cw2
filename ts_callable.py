@@ -1,19 +1,21 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def keanes_bump_function(x):
+    # print(x)
     if (
-        np.any(x <= 0)
-        or np.any(x >= 10)
+        np.any(x < 0)
+        or np.any(x > 10)
         or np.prod(x) <= 0.75
         or np.sum(x) >= 15 * len(x) / 2
     ):
         return np.inf  # Return infinity if constraints are violated
     sum_cos_x4 = np.sum(np.cos(x) ** 4)
     prod_cos_x2 = np.prod(np.cos(x) ** 2)
-    sum_xi_squared = np.sum(x**2)
+    indices = np.arange(1, len(x) + 1)
     numerator = sum_cos_x4 - 2 * prod_cos_x2
-    denominator = np.sqrt(sum_xi_squared)
+    denominator = np.sqrt(np.sum(indices * (x**2)))
     return -numerator / denominator  # Negative because we need to maximize
 
 
@@ -21,7 +23,7 @@ def local_search(base_point, delta, tabu_list, evaluate_function):
     best_value = evaluate_function(base_point)
     best_point = base_point.copy()
 
-    # Step 3: Explore the neighborhood
+    # Explore the neighborhood
     for i in range(len(base_point)):
         for d in [-delta, delta]:  # Decrease and increase the current variable
             new_point = best_point.copy()
@@ -33,7 +35,7 @@ def local_search(base_point, delta, tabu_list, evaluate_function):
                         best_value = new_value
                         best_point = new_point
 
-    # Step 5: Pattern move (if there was an improvement)
+    # Pattern move (if there was an improvement)
     if not np.array_equal(best_point, base_point):
         pattern_point = base_point + (best_point - base_point)
         if (
@@ -52,60 +54,100 @@ def local_search(base_point, delta, tabu_list, evaluate_function):
         return base_point  # Return the base point if no improvement was found
 
 
+# def update_medium_term_memory(
+#     archive, candidate, candidate_value, archive_size, D_min=20, D_sim=2
+# ):
+#     def euclidean_distance(xa, xb):
+#         return np.sqrt(np.sum((xa - xb) ** 2))
+
+#     # If the archive is not full, add the candidate solution
+#     if len(archive) < archive_size:
+#         archive.append((candidate, candidate_value))
+#         return
+
+#     # Calculate the distances of the candidate to all solutions in the archive
+#     distances = np.array([euclidean_distance(candidate, x[0]) for x in archive])
+
+#     # Find the most similar and the worst solution in the archive
+#     most_similar_index = np.argmin(distances)
+#     worst_index = np.argmax([x[1] for x in archive])
+
+#     # If the candidate is sufficiently dissimilar from all archived solutions or better than the worst
+#     if (distances > D_min).all():
+#         # Add candidate to the archive if it is not similar to any in the archive
+#         archive.append((candidate, candidate_value))
+#         # If the archive exceeds its size limit, remove the worst solution
+#         if len(archive) > archive_size:
+#             del archive[worst_index]
+#     elif (candidate_value < archive[most_similar_index][1]) and (
+#         distances[most_similar_index] < D_sim
+#     ):
+#         archive[most_similar_index] = (candidate, candidate_value)
+
+
+def update_medium_term_memory(memory, point, value, size_limit, D_min=20, D_sim=2):
+    """
+    Update the medium-term memory with new solutions, keeping only the best ones.
+    """
+    # Check if the memory is not full or the new value is better than the worst in memory
+    if len(memory) < size_limit or value < memory[-1][1]:
+        # Insert the new solution and sort the memory based on values
+        memory.append((point, value))
+        memory.sort(key=lambda x: x[1])  # Sort by the objective function value
+        # Keep only the best solutions if the memory exceeds its size limit
+        while len(memory) > size_limit:
+            memory.pop()  # Remove the worst solution
+
+
 def tabu_search(
     tabu_list_size,
+    medium_term_memory_size,
     initial_step_size,
     step_size_reduction_factor,
-    medium_term_memory_size,
     num_variables=8,
     max_evaluations=10000,
     intensify_thresh=10,
     diversify_thresh=15,
     reduce_thresh=25,
+    D_min=20,
+    D_sim=2,
 ):
-    best_solution = np.random.uniform(0, 10, num_variables)
-    # best_solution = np.array([
-    #     2.10560965,
-    #     3.18194561,
-    #     0.87809551,
-    #     3.22561506,
-    #     2.79578934,
-    #     0.72160917,
-    #     0.22399556,
-    #     0.19429642,
-    # ])
-    best_value = keanes_bump_function(best_solution)
+    current_search = np.random.uniform(0, 10, num_variables)
+    current_search_sol = keanes_bump_function(current_search)
     evaluations = 1
     counter = 0
     short_term_memory = []
     medium_term_memory = []
-    long_term_memory = np.zeros(
-        (num_variables, 10)
-    )  # For discretizing the search space
+    long_term_memory = np.zeros((num_variables, 10))
 
     step_size = initial_step_size
 
     while evaluations < max_evaluations:
         new_point = local_search(
-            best_solution, step_size, short_term_memory, keanes_bump_function
+            current_search, step_size, short_term_memory, keanes_bump_function
         )
         new_value = keanes_bump_function(new_point)
         evaluations += 2 * num_variables
 
         # Check if the new point is an improvement and not in the short-term memory
-        if new_value < best_value and list(new_point) not in short_term_memory:
-            best_solution, best_value = new_point, new_value
+        if new_value < current_search_sol and list(new_point) not in short_term_memory:
+            current_search, current_search_sol = new_point, new_value
             # Update medium-term memory with the new best solution
-            medium_term_memory.append((new_point, new_value))
-            if len(medium_term_memory) > medium_term_memory_size:
-                medium_term_memory.pop(0)
+            update_medium_term_memory(
+                medium_term_memory,
+                new_point,
+                new_value,
+                medium_term_memory_size,
+                D_min=D_min,
+                D_sim=D_sim,
+            )
 
             # Update long-term memory
             for i, x in enumerate(new_point):
                 index = min(int(np.floor(x)), 9)  # Ensure index is within bounds [0, 9]
                 long_term_memory[i, index] += 1
         else:
-            counter+=1
+            counter += 1
 
         # Add the new point to the short-term memory
         short_term_memory.append(list(new_point))
@@ -114,40 +156,117 @@ def tabu_search(
 
         # Intensification: Move to the average of the best M solutions
         if counter >= intensify_thresh:
-            print("INTENSIFY")
+            # print("INTENSIFY")
             best_solutions = np.array([m[0] for m in medium_term_memory])
-            best_solution = np.mean(best_solutions, axis=0)
+            current_search = np.mean(best_solutions, axis=0)
             # new_best_solution_counter = 0
-
-        # Diversification: Find the least visited area in the long-term memory
         if counter >= diversify_thresh:
-            print("DIVERSIFY")
+            # print("DIVERSIFY")
+            # Identify the least visited quadrant
             least_visited_indices = np.argmin(long_term_memory, axis=1)
-            best_solution = least_visited_indices + 0.5
-            best_solution = np.clip(best_solution, 0, 9.999)
-            # step_size = initial_step_size  # Reset the step size
-            # new_best_solution_counter = 0
-
+            # Randomly select a point within that quadrant
+            for i, idx in enumerate(least_visited_indices):
+                range_min = idx  # assuming each quadrant is 1 unit
+                range_max = min(idx + 1, 9)  # prevent index out of bounds
+                current_search[i] = np.random.uniform(range_min, range_max)
+            current_search = np.clip(current_search, 0, 10)
         if counter >= reduce_thresh:
-            print("REDUCE")
+            # print("REDUCE")
             step_size *= step_size_reduction_factor
             counter = 0
-        if step_size < 0.01:
-            return best_solution, -best_value
-    print(f"Step size: {step_size}")
-    return best_solution, -best_value
+        if step_size < initial_step_size / 10000:
+            # print(f"Step size: {step_size}")
+            return medium_term_memory
+    # print(f"Step size: {step_size}")
+    return medium_term_memory
 
 
-# Example usage of the tabu_search function with predefined parameters
+def keanes_bump(x1, x2):
+    return np.abs(
+        (np.cos(x1) ** 4 + np.cos(x2) ** 4 - 2 * (np.cos(x1) ** 2) * (np.cos(x2) ** 2))
+        / np.sqrt(x1**2 + 2 * x2**2)
+    )
+
+
+def boundary_mask(x1, x2):
+    return (
+        (0 <= x1)
+        & (x1 <= 10)
+        & (0 <= x2)
+        & (x2 <= 10)
+        & (x1 * x2 > 0.75)
+        & (x1 + x2 < 15)
+    )
+
+
+def plot_2Dkeanes_bump_with_memory(medium_term_memory):
+    x1 = np.linspace(0, 10, 400)
+    x2 = np.linspace(0, 10, 400)
+    X1, X2 = np.meshgrid(x1, x2)
+    Z = keanes_bump(X1, X2)
+
+    mask = boundary_mask(X1, X2)
+    Z[~mask] = np.nan
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    contour = ax.contourf(X1, X2, Z, levels=50, cmap="viridis")
+
+    # Plot the medium term memory points
+    mtm_x1, mtm_x2 = zip(*[point for point, value in medium_term_memory])
+    ax.plot(mtm_x1, mtm_x2, "ro", markersize=5, label="Medium Term Memory")
+
+    x1_boundary = np.linspace(0.75, 10, 400)
+    x2_boundary = 0.75 / x1_boundary
+    ax.plot(x1_boundary, x2_boundary, "r--", label=r"$x_1x_2 > 0.75$")
+
+    x1_plus_x2 = np.linspace(0, 10, 400)
+    x2_plus_x2 = 15 - x1_plus_x2
+    ax.plot(x1_plus_x2, x2_plus_x2, "b--", label=r"$x_1 + x_2 < 15$")
+
+    ax.set_xlabel("x1")
+    ax.set_ylabel("x2")
+    ax.set_title("Keane's Bump Function Contour with Boundary Conditions")
+    ax.legend()
+    ax.set_ylim(0, 10)
+
+    fig.colorbar(contour, ax=ax, label="f(x1, x2)")
+    plt.show()
+
+
 if __name__ == "__main__":
     individual = {
-        "tabu_list_size": 7,
-        "initial_step_size": 2,
+        "num_variables": 8,
+        "initial_step_size": 4,
         "step_size_reduction_factor": 0.8,
-        "medium_term_memory_size": 4,  # Example value for M
+        "tabu_list_size": 7,
+        "medium_term_memory_size": 10,
+        "D_min": 20,
+        "D_sim": 2,
+        "intensify_thresh": 10,
+        "diversify_thresh": 15,
+        "reduce_thresh": 25,
     }
-   
-    solution, value = tabu_search(**individual)
-    print(np.prod(solution), np.sum(solution)<15*4)
+    individual = {
+        "num_variables": 8,
+        "initial_step_size": 3.8377312562936727,
+        "step_size_reduction_factor": 0.46319761829933004,
+        "tabu_list_size": 10,
+        "medium_term_memory_size": 22,
+        "D_min": 94.57832785852996,
+        "D_sim": 7.787363437552019,
+        "intensify_thresh": 10,
+        "diversify_thresh": 15,
+        "reduce_thresh": 25,
+    }
+    archive = tabu_search(**individual)
+    print(archive)
+    best_index = np.argmin([x[1] for x in archive])
+    solution, value = (
+        archive[best_index][0],
+        -archive[best_index][1],
+    )
+    # print(np.prod(solution), np.sum(solution)<15*4)
     print(f"Best solution: {solution}")
     print(f"Best objective function value: {value}")
+    if individual["num_variables"] == 2:
+        plot_2Dkeanes_bump_with_memory(archive)

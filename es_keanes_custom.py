@@ -11,7 +11,7 @@ def keanes_bump(x):
     return -(np.abs((term1 - term2) / term3))  #maximize
 
 # bounds for the 8 parameters
-bounds = [(0.75, 10)] * 8
+bounds = [(0, 10)] * 8
 
 # parameters for the evolutionary algorithm
 population_size = 50

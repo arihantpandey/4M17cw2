@@ -15,14 +15,14 @@ def keanes_bump(x):
     return -result
 
 # Define bounds for each of the 8 parameters
-bounds = [(0.75, 10)] * 8
+bounds = [(0, 10)] * 8
 
 # Define the recombination strategy parameters
 strategy_params = {
     'strategy': 'best1bin',  # Strategy for producing new trial solutions
     'recombination': 0.7,    # Recombination constant
     'mutation': (0.5, 1.0),  # Mutation factor range
-    'maxiter': 1000,         # Maximum number of generations over which entire population is evolved
+    'maxiter': 10000,         # Maximum number of generations over which entire population is evolved
     'popsize': 15,           # Multiplier for setting the total population size
     'tol': 0.01,             # Tolerance for convergence
     'updating': 'deferred'   # Updating strategy

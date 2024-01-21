@@ -17,9 +17,9 @@ def keanes_bump_function(x):
 
 # Initialize parameters
 num_variables = 8
-max_iterations = 1000
-tabu_list_size = 100
-neighborhood_size = 50
+max_iterations = 10000
+tabu_list_size = 10
+neighborhood_size = 10
 intensification_factor = 2  # Factor by which to intensify search around good solutions
 diversification_threshold = 0.6  # Threshold to trigger diversification
 step_size = 1.0  # Initial step size
