@@ -31,17 +31,21 @@ def initialize_population(size, param_bounds, seed=None):
     return population
 
 
-def fitness(individual):
+def fitness(individual, runs=3):
     # Run Tabu Search with the individual's hyperparameters and return the performance
     try:
-        archive = tabu_search(**individual)
-        best_index = np.argmin([x[1] for x in archive])
-        solution, best_value = (
-            archive[best_index][0],
-            -archive[best_index][1],
-        )
-        print(f"solution: {best_value}")
-        return best_value
+        fitnesses = []
+        for _ in range(runs):
+            archive, _ = tabu_search(**individual)
+            best_index = np.argmin([x[1] for x in archive])
+            solution, best_value = (
+                archive[best_index][0],
+                -archive[best_index][1],
+            )
+            fitnesses.append(best_value)
+        avg_best_val = np.mean(fitnesses)
+        print(f"avg final value: {avg_best_val}")
+        return avg_best_val
     except:
         return np.inf
 
@@ -83,7 +87,7 @@ def mutate(individual, param_bounds, mutation_rate):
 
 def genetic_algorithm():
     param_bounds = {
-        "initial_step_size": (0.5, 5),
+        "initial_step_size": (0.5, 10),
         "step_size_reduction_factor": (0.25, 0.99),
         "tabu_list_size": (4, 10),
         "medium_term_memory_size": (1, 25),
@@ -94,10 +98,10 @@ def genetic_algorithm():
         "reduce_thresh": (1, 100),
     }
 
-    population_size = 30
+    population_size = 15
     num_generations = 12
     num_parents = population_size // 2
-    mutation_rate = 0.01
+    mutation_rate = 0.1
     crossover_prob = 0.95
     population = initialize_population(population_size, param_bounds)
     best_individual = None
@@ -106,19 +110,20 @@ def genetic_algorithm():
     archive_size = 5  # Max number of individuals to keep in the archive
 
     for generation in range(num_generations):
-        fitnesses = [fitness(individual) for individual in population]
+        fitnesses = [fitness(individual=individual) for individual in population]
         avg_fitness = sum(fitnesses) / len(fitnesses)
         generation_best_fitness = max(fitnesses)
 
         if generation_best_fitness > best_fitness:
             best_fitness = generation_best_fitness
-            best_individual = population[fitnesses.index(best_fitness)]
-            archive.append(best_individual)  # Add the best individual to the archive
+            best_individual_index = fitnesses.index(best_fitness)
+            best_individual = population[best_individual_index]
+            archive.append((best_individual, best_fitness))  # Store individual and its fitness
 
-        # Keep only the top N individuals in the archive
-        archive = sorted(archive, key=lambda ind: fitness(ind), reverse=True)[
-            :archive_size
-        ]
+
+        # Sort the archive based on stored fitness values
+        archive.sort(key=lambda x: x[1], reverse=True)
+        archive = archive[:archive_size]
 
         print(
             f"Generation {generation + 1}/{num_generations} - Best Fitness: {best_fitness}, Avg Fitness: {avg_fitness}, Archive Size: {len(archive)}"
@@ -142,9 +147,9 @@ def genetic_algorithm():
 best_hyperparameters, archive = genetic_algorithm()
 print("Best hyperparameters:", best_hyperparameters)
 
-for i, archived_individual in enumerate(archive, start=1):
+for i, (archived_individual, archived_fitness) in enumerate(archive, start=1):
     print(
-        f"Archived Individual {i}: {archived_individual}, Fitness: {fitness(archived_individual)}"
+        f"Archived Individual {i}: {archived_individual}, Fitness: {archived_fitness}"
     )
 
 print("Tabu Search Result with Best Hyperparameters:", fitness(best_hyperparameters))
